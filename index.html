@@ -336,6 +336,7 @@ h2{font-size:1.7em;line-height:1.15;font-weight:800}
   <h2 style="color:#0b2a4a">Panel del kiosco</h2>
   <div id="adm-stats"></div>
   <button class="btn ok" id="adm-retry">Reintentar envíos pendientes</button>
+  <button class="btn ok" id="adm-all">Reenviar TODOS los registros (sin duplicar)</button>
   <button class="btn warn" id="adm-csv">Descargar respaldo CSV</button>
   <button class="btn ghost" style="color:#111;background:#ddd" id="adm-fs">Pantalla completa</button>
   <button class="btn no" id="adm-close">Cerrar</button>
@@ -350,7 +351,8 @@ const CONFIG = {
   // datos se guardan solo en este equipo (respaldo descargable desde el panel).
   endpoint: "https://script.google.com/macros/s/AKfycbwUWaQKzD4btmcMFye3Vu9ynsYE1quWbH3uy0MP-WeGqfrvcxDKqb5ARueXWYVqPbrksA/exec",
 
-  kioscoId: "CAJERO-01",               // identifica este equipo en la planilla
+  kioscoId: "CAJERO-01",
+  comuna: "",                          // comuna fija donde está el cajero (se guarda en la planilla)               // identifica este equipo en la planilla
   lugar: "Iglesia Adventista · Chile",  // aparece en el comprobante
 
   logos: {
@@ -398,8 +400,7 @@ const COMUNES_INI = [
   {id:"nombre",  type:"text",  label:"Nombre", prompt:"Ingrese su nombre", hint:"Nombre y apellido", min:2},
 ];
 const COMUNES_FIN = [
-  {id:"telefono",type:"phone", label:"Teléfono", prompt:"Ingrese su número de celular", hint:"9 dígitos, ej: 9 1234 5678"},
-  {id:"comuna",  type:"text",  label:"Comuna", prompt:"Ingrese su comuna", hint:"Ej: Puente Alto", min:2},
+  {id:"telefono",type:"phone", label:"Teléfono", prompt:"Ingrese su número de celular", hint:"El +56 9 ya está ingresado: digite los 8 números restantes"},
 ];
 
 const OPS = {
@@ -516,6 +517,7 @@ function startOp(key){
 function renderStep(){
   const steps=visibleSteps(), st=steps[stepIdx];
   buffer=data[st.id]||"";
+  if(st.type==="phone") buffer=buffer.replace(/^9/,"");
   $("#st-op").textContent=`${op.ico} ${op.tipo} · ${op.nombre}`;
   $("#st-prog").innerHTML=steps.map((_,i)=>`<i class="${i<=stepIdx?"on":""}"></i>`).join("");
   $("#st-prompt").textContent=st.prompt;
@@ -538,7 +540,7 @@ function renderStep(){
       </div>`;
     body.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{
       const k=b.dataset.k;
-      if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<9) buffer+=k;
+      if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<8) buffer+=k;
       paintDisplay(st);
     });
   }
@@ -569,13 +571,13 @@ function renderStep(){
     const sk=$("#st-skip"); if(sk) sk.onclick=()=>{data[st.id]="";next()};
   }
   const pv=$("#st-prev"); if(pv) pv.onclick=prev;
-  const nx=$("#st-next"); if(nx) nx.onclick=()=>{ if(valid(st)){data[st.id]=buffer.trim();next()} };
+  const nx=$("#st-next"); if(nx) nx.onclick=()=>{ if(valid(st)){data[st.id]=st.type==="phone"?"9"+buffer:buffer.trim();next()} };
   paintDisplay(st);
 }
 
 function valid(st){
   const v=buffer.trim();
-  if(st.type==="phone") return /^9\d{8}$/.test(v);
+  if(st.type==="phone") return /^\d{8}$/.test(v);
   if(st.optional) return true;
   return v.length>=(st.min||1);
 }
@@ -583,9 +585,15 @@ function paintDisplay(st){
   const d=$("#disp"); if(!d) return;
   let shown=buffer;
   if(st.type==="phone"){
-    shown="+56 "+buffer.replace(/^(\d)(\d{0,4})(\d{0,4}).*/,(m,a,b,c)=>[a,b,c].filter(Boolean).join(" "));
+    // "+56 9" fijo; los 8 dígitos se completan sobre la plantilla ____ ____
+    const t=(buffer+"________").slice(0,8);
+    const typed=buffer.length;
+    const fmt=[...t].map((c,i)=>(i===4?" ":"")+(i<typed?esc(c):`<span class="ph">_</span>`)).join("");
+    d.innerHTML=`<span style="color:#fff">+56 9</span>&nbsp;${fmt}`;
+    const nx=$("#st-next"); if(nx) nx.disabled=!valid(st);
+    return;
   }
-  d.innerHTML=buffer?`${esc(shown)}<span class="caret"></span>`:`<span class="ph">${st.type==="phone"?"+56 9 ____ ____":"_"}</span><span class="caret"></span>`;
+  d.innerHTML=buffer?`${esc(shown)}<span class="caret"></span>`:`<span class="ph">_</span><span class="caret"></span>`;
   const nx=$("#st-next"); if(nx) nx.disabled=!valid(st);
 }
 function prev(){ if(stepIdx===0){go("menu");return} stepIdx--; renderStep(); }
@@ -601,7 +609,7 @@ let consent=false;
 function showConfirm(){
   consent=false; $("#cf-consent").classList.remove("on"); $("#cf-consent .box").textContent=""; $("#cf-ok").disabled=true;
   const rows=[["Operación",`${op.tipo} · ${op.nombre}`],
-    ...visibleSteps().map(p=>[p.label, p.type==="phone"?"+56 "+data[p.id]:(data[p.id]||"—")])];
+    ...visibleSteps().map(p=>[p.label, p.type==="phone"?"+56 9 "+data[p.id].slice(1,5)+" "+data[p.id].slice(5):(data[p.id]||"—")])];
   $("#cf-summary").innerHTML=rows.map(([k,v])=>`<div class="row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("");
   go("confirm");
 }
@@ -622,11 +630,18 @@ function folio(){
 async function send(rec){
   if(!CONFIG.endpoint) return false;
   try{
-    await fetch(CONFIG.endpoint,{method:"POST",mode:"no-cors",
+    // Petición "simple" (sin preflight): Apps Script responde con CORS abierto,
+    // así se puede leer la respuesta y confirmar que la fila se guardó.
+    const r=await fetch(CONFIG.endpoint,{method:"POST",redirect:"follow",
       headers:{"Content-Type":"application/x-www-form-urlencoded"},
       body:new URLSearchParams(rec).toString()});
-    return true;   // con no-cors no se puede leer la respuesta; si no hay error de red, se asume recibido
-  }catch(e){return false}
+    const j=await r.json();
+    if(!j.ok) console.warn("Apps Script respondió con error:",j.error);
+    return !!j.ok;
+  }catch(e){
+    console.warn("No se pudo enviar (¿acceso del script no es 'Cualquier persona'?)",e);
+    return false;   // queda en cola y se reintenta
+  }
 }
 
 async function submit(){
@@ -634,7 +649,7 @@ async function submit(){
   const rec={
     folio:folio(), fecha:new Date().toLocaleString("es-CL"), kiosco:CONFIG.kioscoId,
     operacion:op.nombre, tipo_cajero:op.tipo,
-    nombre:data.nombre||"", telefono:data.telefono?"+56"+data.telefono:"", comuna:data.comuna||"",
+    nombre:data.nombre||"", telefono:data.telefono?"+56"+data.telefono:"", comuna:CONFIG.comuna||"",
     direccion:data.direccion||"",
     detalle: visibleSteps().filter(p=>!["nombre","telefono","comuna","direccion"].includes(p.id))
               .map(p=>`${p.label}: ${data[p.id]||"—"}`).join(" | "),
@@ -733,6 +748,12 @@ function openAdminNoPin(){
   $("#admin").classList.add("show");
 }
 $("#adm-fs").onclick=tryFullscreen;
+$("#adm-all").onclick=async()=>{
+  const all=store.get("cajero_registros",[]); let ok=0; const left=[];
+  for(const r of all){ if(await send(r)) ok++; else left.push(r) }
+  store.set("cajero_pendientes",left);
+  alert(`Enviados/confirmados: ${ok} · Fallidos: ${left.length}`); openAdminRefresh();
+};
 $("#adm-csv").onclick=()=>{
   const all=store.get("cajero_registros",[]); if(!all.length){alert("Sin registros");return}
   const cols=["folio","fecha","kiosco","operacion","tipo_cajero","nombre","telefono","comuna","direccion","detalle","consentimiento"];
