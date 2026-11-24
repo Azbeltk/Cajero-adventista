@@ -359,11 +359,13 @@ const CONFIG = {
   },
 
   nuevoTiempo: {
-    // Opción A: ID del canal de YouTube (empieza con "UC...") → muestra la transmisión en vivo.
-    youtubeChannelId: "",
-    // Opción B: URL de inserción directa (tiene prioridad si se completa).
+    // ID interno del canal de YouTube @NuevoTiempoChile → muestra la transmisión en vivo.
+    youtubeChannelId: "UCNDiH9MuZyzzFcBTUno4eDA",
+    youtube: "https://www.youtube.com/@NuevoTiempoChile",
+    // Opcional: para mostrar un video o lista fija en vez del en vivo, pegue aquí su URL
+    // de inserción (ej: "https://www.youtube.com/embed/ID_DEL_VIDEO"). Si se deja vacío, se usa el en vivo.
     embedUrl: "",
-    website: "https://www.nuevotiempo.cl", // destino del código QR — verifique la URL
+    website: "https://www.nuevotiempo.cl/", // destino del código QR
     info: "Programación cristiana 24 horas: familia, salud, música y estudio de la Biblia."
   },
 
@@ -686,7 +688,7 @@ function startTV(){
     ? `<iframe src="${esc(url)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`
     : `<div class="tv-off"><span data-logo="nt"></span><h2>Nuevo Tiempo Chile</h2><p style="margin-top:1.5vmin">${esc(CONFIG.nuevoTiempo.info)}</p></div>`;
   paintLogos();
-  $("#tv-info").innerHTML=`<b>Sobre el canal</b>${esc(CONFIG.nuevoTiempo.info)}`;
+  $("#tv-info").innerHTML=`<b>Sobre el canal</b>${esc(CONFIG.nuevoTiempo.info)}<br><br>🌐 nuevotiempo.cl<br>▶️ YouTube: @NuevoTiempoChile`;
   const q=$("#qr");
   if(!q.dataset.done && window.QRCode){ new QRCode(q,{text:CONFIG.nuevoTiempo.website,width:256,height:256,correctLevel:QRCode.CorrectLevel.M}); q.dataset.done=1 }
   if(!window.QRCode) q.innerHTML=`<div style="color:#000;font-size:.8em;padding:1vmin">${esc(CONFIG.nuevoTiempo.website)}</div>`;
