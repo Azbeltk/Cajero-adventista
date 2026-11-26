@@ -215,6 +215,14 @@ input.display{font-size:1.7em}
 #qr img,#qr canvas{width:20vmin!important;height:20vmin!important}
 
 /* Aviso de inactividad */
+#ask{position:fixed;inset:0;background:rgba(2,10,20,.85);display:none;align-items:center;justify-content:center;z-index:55}
+#ask.show{display:flex}
+#ask .box{background:var(--azul2);border:3px solid var(--rojo);border-radius:20px;padding:5vmin;text-align:center;max-width:90vmin}
+.actions.top{margin-bottom:1vmin}
+.actions.top .btn{min-height:7.5vmin;padding:1.2vmin 2vmin}
+.kb,.pin{touch-action:none}
+.key.down{transform:translateY(3px);box-shadow:0 1px 0 #8aa1b8;background:#fff}
+.key.dark.down{background:#7d97b3}
 #idle{position:fixed;inset:0;background:rgba(2,10,20,.85);display:none;align-items:center;justify-content:center;z-index:50}
 #idle.show{display:flex}
 #idle .box{background:var(--azul2);border:3px solid var(--dorado);border-radius:20px;padding:5vmin;text-align:center;max-width:80vmin}
@@ -333,6 +341,11 @@ input.display{font-size:1.7em}
   <footer class="ticker"><span class="tag">INFO</span><span class="run" id="ticker"></span></footer>
 </div>
 
+<div id="ask"><div class="box">
+  <h2>¿Cancelar la operación?</h2>
+  <p class="muted" style="margin:1.5vmin 0 3vmin">Se borrarán los datos que ingresó.</p>
+  <div class="actions"><button class="btn ok" id="ask-no">No, seguir</button><button class="btn no" id="ask-yes">Sí, cancelar</button></div>
+</div></div>
 <div id="idle"><div class="box">
   <h2>¿Sigue ahí?</h2>
   <p class="muted" style="margin:1.5vmin 0">Por su privacidad, la sesión se cerrará en</p>
@@ -498,13 +511,13 @@ function go(name){
   $("#s-"+name).classList.add("active");
   current=name;
   if(name==="tv") startTV(); else stopTV();
-  if(name==="home") resetSession();
+  if(name==="home"){ resetSession(); $("#ask").classList.remove("show") }
 }
 document.addEventListener("click",e=>{
   const g=e.target.closest("[data-go]"); if(g){go(g.dataset.go);return}
   const o=e.target.closest("[data-op]"); if(o){startOp(o.dataset.op);return}
   const a=e.target.closest("[data-act]");
-  if(a){ if(a.dataset.act==="cancel") go("menu"); if(a.dataset.act==="back"){stepIdx=visibleSteps().length-1;renderStep();go("step")} }
+  if(a){ if(a.dataset.act==="cancel") askCancel(); if(a.dataset.act==="back"){stepIdx=visibleSteps().length-1;renderStep();go("step")} }
 });
 $("#s-home").addEventListener("click",()=>{go("menu"); tryFullscreen()});
 
@@ -533,9 +546,25 @@ const MAX_TEXTO=60, MAX_AREA=800;
 /* Teclas: se usa pointerdown (respuesta inmediata, admite toques rápidos y
    varios dedos) en vez de click, que en Android pierde toques seguidos. */
 function bindKeys(root,fn){
-  root.querySelectorAll("[data-k]").forEach(b=>{
-    b.addEventListener("pointerdown",e=>{e.preventDefault();lastTouch=Date.now();fn(b.dataset.k,b)});
-    b.addEventListener("click",e=>e.preventDefault());
+  const press=b=>{
+    lastTouch=Date.now(); fn(b.dataset.k,b);
+    b.classList.add("down"); clearTimeout(b._t); b._t=setTimeout(()=>b.classList.remove("down"),110);
+  };
+  // Pantallas táctiles: un evento por cada dedo nuevo, aunque el anterior aún no se levante
+  root.addEventListener("touchstart",e=>{
+    let hit=false;
+    for(const t of e.changedTouches){
+      const el=t.target.nodeType===1?t.target:t.target.parentElement;
+      const b=el&&el.closest("[data-k]");
+      if(b&&root.contains(b)){hit=true;press(b)}
+    }
+    if(hit) e.preventDefault();          // evita zoom/arrastre/clic fantasma solo sobre las teclas
+  },{passive:false});
+  // Mouse / lápiz (cajeros con pantalla tipo mouse)
+  root.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="touch") return;
+    const b=e.target.closest("[data-k]"); if(!b||!root.contains(b)) return;
+    e.preventDefault(); press(b);
   });
 }
 
@@ -591,12 +620,12 @@ function renderStep(){
       ?`<textarea class="display multi txt" id="txt" maxlength="${max}" autocapitalize="sentences" spellcheck="true"></textarea>`
       :`<input class="display txt" id="txt" maxlength="${max}" autocapitalize="words" autocomplete="off" spellcheck="false">`;
     body.innerHTML=`<div class="txt-wrap">${campo}<span class="count" id="txt-n"></span></div>
+      <div class="actions top"><button class="btn no" data-act="cancel">Cancelar</button><button class="btn warn" id="st-prev">Volver</button>
+        ${ES_MOVIL?"":`<button class="btn ghost kb-toggle" id="kb-toggle"></button>`}${st.optional?`<button class="btn ghost" id="st-skip">Omitir</button>`:""}<button class="btn ok" id="st-next">Continuar</button></div>
       <div class="kb" id="kb">
         ${rows.map(r=>`<div class="row">${r.map(k=>`<button class="key" data-k="${k}">${k}</button>`).join("")}</div>`).join("")}
         <div class="row"><button class="key dark w2" data-k="ÁÉ">Á É…</button><button class="key w6" data-k=" ">espacio</button><button class="key dark w2" data-k="DEL">⌫ Borrar</button></div>
-      </div>
-      <div class="actions"><button class="btn no" data-act="cancel">Cancelar</button><button class="btn warn" id="st-prev">Volver</button>
-        ${ES_MOVIL?"":`<button class="btn ghost kb-toggle" id="kb-toggle"></button>`}${st.optional?`<button class="btn ghost" id="st-skip">Omitir</button>`:""}<button class="btn ok" id="st-next">Continuar</button></div>`;
+      </div>`;
     const tx=$("#txt"); tx.value=buffer;
 
     const applyMode=()=>{
@@ -660,7 +689,23 @@ function paintDisplay(st){
   }
   if(nx) nx.disabled=!valid(st);
 }
-function prev(){ if(stepIdx===0){go("menu");return} stepIdx--; renderStep(); }
+function guardarBorrador(){
+  if(current!=="step"||!op) return;
+  const st=visibleSteps()[stepIdx];
+  if(st&&(st.type==="text"||st.type==="area")) data[st.id]=buffer;
+  if(st&&st.type==="phone"&&buffer) data[st.id]=phoneIntl?"+"+buffer:"+569"+buffer;
+}
+function prev(){
+  guardarBorrador();                       // lo escrito no se pierde al volver
+  if(stepIdx===0){askCancel();return}
+  stepIdx--; renderStep();
+}
+function hayDatos(){ return !!buffer || Object.values(data).some(v=>v) }
+function askCancel(){
+  if(current!=="step"&&current!=="confirm"){go("menu");return}
+  if(!hayDatos()){go("menu");return}
+  $("#ask").classList.add("show");
+}
 function next(){
   const steps=visibleSteps();
   // limpia datos de pasos que ya no aplican
@@ -789,6 +834,8 @@ function showIdle(){
   idleTimer=setInterval(()=>{ n--; $("#idle-n").textContent=n;
     if(n<=0){clearInterval(idleTimer);$("#idle").classList.remove("show");go("home")} },1000);
 }
+$("#ask-no").onclick=()=>$("#ask").classList.remove("show");
+$("#ask-yes").onclick=()=>{$("#ask").classList.remove("show");go("menu")};
 $("#idle-stay").onclick=()=>{clearInterval(idleTimer);$("#idle").classList.remove("show");lastTouch=Date.now()};
 
 /* =========================================================
