@@ -45,6 +45,12 @@ header.bar{display:flex;align-items:center;justify-content:space-between;
   border:3px solid var(--blanco);display:grid;place-items:center;font-weight:800;font-size:.8em;letter-spacing:.05em}
 .brand-txt b{display:block;font-size:1.05em;letter-spacing:.02em}
 .brand-txt span{font-size:.72em;color:var(--gris)}
+.hdr-right{display:flex;align-items:center;gap:2vmin}
+#fs-btn{font:inherit;font-size:.72em;font-weight:700;color:#fff;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);
+  border-radius:12px;padding:1vmin 1.8vmin;min-height:44px;display:flex;align-items:center;gap:1vmin;cursor:pointer;white-space:nowrap}
+#fs-btn:active{background:rgba(255,255,255,.25)}
+#fs-btn svg{width:1.4em;height:1.4em}
+@media (max-width:640px){#fs-btn span{display:none}}
 .clock{font-family:'Share Tech Mono',monospace;font-size:1.1em;text-align:right;color:var(--celeste)}
 .clock small{display:block;font-size:.65em;color:var(--gris)}
 
@@ -283,7 +289,7 @@ input.display{font-size:1.7em}
       <span data-logo="iasd"></span>
       <div class="brand-txt"><b id="hdr-title">Cajero de la Esperanza</b><span id="hdr-sub">Iglesia Adventista del Séptimo Día</span></div>
     </div>
-    <div class="clock"><span id="clk">--:--</span><small id="clk-date"></small></div>
+    <div class="hdr-right"><button id="fs-btn" type="button" title="Pantalla completa" aria-label="Pantalla completa"></button><div class="clock"><span id="clk">--:--</span><small id="clk-date"></small></div></div>
   </header>
 
   <main>
@@ -962,6 +968,20 @@ $("#adm-comuna").onclick=()=>{
   if(c===null) return;
   store.set("cajero_comuna",c.trim()); openAdminRefresh();
 };
+/* Botón de pantalla completa (esquina superior derecha) */
+const FS_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Pantalla completa</span>';
+const FS_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><span>Salir</span>';
+function paintFs(){
+  const b=$("#fs-btn");
+  if(!document.documentElement.requestFullscreen){ b.style.display="none"; return }  // p. ej. iPhone
+  b.innerHTML=document.fullscreenElement?FS_OFF:FS_ON;
+}
+$("#fs-btn").addEventListener("click",e=>{
+  e.stopPropagation();                       // no cuenta como "tocar para comenzar"
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else tryFullscreen();
+});
+document.addEventListener("fullscreenchange",paintFs);
+paintFs();
 $("#adm-fs").onclick=()=>{
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else tryFullscreen();
 };
