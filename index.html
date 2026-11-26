@@ -110,7 +110,7 @@ h2{font-size:1.7em;line-height:1.15;font-weight:800}
 .btn[disabled]{opacity:.4;pointer-events:none}
 
 /* ---------- Paso de operación ---------- */
-#s-step{gap:2vmin}
+#s-step{gap:1.4vmin}
 .op-title{display:flex;align-items:center;gap:1.5vmin;color:var(--dorado);font-weight:800;
   text-transform:uppercase;letter-spacing:.08em;font-size:.85em}
 .progress{display:flex;gap:.8vmin;margin-left:auto}
@@ -122,6 +122,15 @@ h2{font-size:1.7em;line-height:1.15;font-weight:800}
   border:3px solid #24527f;border-radius:12px;padding:1.6vmin 2vmin;min-height:9vmin;
   display:flex;align-items:center;word-break:break-word;letter-spacing:.04em}
 .display.multi{font-size:1.2em;min-height:14vmin;align-items:flex-start}
+textarea.display,input.display{width:100%;font:inherit;font-family:'Share Tech Mono',monospace;outline:none;resize:none;
+  -webkit-user-select:text;user-select:text;caret-color:#7ef0a8}
+textarea.display.multi{font-size:1.1em;height:15vmin;min-height:90px;line-height:1.35;overflow-y:auto;display:block}
+input.display{font-size:1.7em}
+.txt-wrap{position:relative}
+.txt-wrap .count{position:absolute;right:1.6vmin;bottom:.8vmin;font-size:.7em;color:#5f9c7f;pointer-events:none}
+.intl{align-self:center;min-height:6.5vmin;padding:1vmin 3vmin;font-size:.75em;text-transform:none;letter-spacing:0}
+.actions .kb-toggle{font-size:.7em;text-transform:none;letter-spacing:0}
+.key{touch-action:manipulation}
 .display .caret{display:inline-block;width:.55em;height:1em;background:#7ef0a8;margin-left:2px;animation:blink 1s steps(2) infinite}
 .display .ph{color:#3d6d58}
 .step-body{flex:1;display:flex;flex-direction:column;gap:1.6vmin;min-height:0}
@@ -129,9 +138,9 @@ h2{font-size:1.7em;line-height:1.15;font-weight:800}
 .actions .btn{flex:1}
 
 /* Teclado alfabético */
-.kb{display:flex;flex-direction:column;gap:1vmin;flex:1;justify-content:flex-end}
+.kb{display:flex;flex-direction:column;gap:.8vmin;flex:1;justify-content:flex-end}
 .kb .row{display:flex;gap:1vmin;justify-content:center}
-.key{font:inherit;font-weight:700;flex:1;max-width:9vmin;min-height:8vmin;border-radius:10px;border:none;
+.key{font:inherit;font-weight:700;flex:1;max-width:9vmin;min-height:6.6vmin;border-radius:10px;border:none;
   background:#dfe7ef;color:#0b2a4a;font-size:1.1em;box-shadow:0 4px 0 #8aa1b8;cursor:pointer}
 .key:active{transform:translateY(3px);box-shadow:0 1px 0 #8aa1b8}
 .key.w2{max-width:16vmin;flex:2}.key.w6{max-width:52vmin;flex:6}
@@ -335,6 +344,7 @@ h2{font-size:1.7em;line-height:1.15;font-weight:800}
 <div id="admin"><div class="box">
   <h2 style="color:#0b2a4a">Panel del kiosco</h2>
   <div id="adm-stats"></div>
+  <button class="btn ok" id="adm-comuna" style="background:#1c5a8f">Cambiar comuna</button>
   <button class="btn ok" id="adm-retry">Reintentar envíos pendientes</button>
   <button class="btn ok" id="adm-all">Reenviar TODOS los registros (sin duplicar)</button>
   <button class="btn warn" id="adm-csv">Descargar respaldo CSV</button>
@@ -352,7 +362,7 @@ const CONFIG = {
   endpoint: "https://script.google.com/macros/s/AKfycbwUWaQKzD4btmcMFye3Vu9ynsYE1quWbH3uy0MP-WeGqfrvcxDKqb5ARueXWYVqPbrksA/exec",
 
   kioscoId: "CAJERO-01",
-  comuna: "",                          // comuna fija donde está el cajero (se guarda en la planilla)               // identifica este equipo en la planilla
+  comuna: "",                          // comuna por defecto (se puede cambiar desde el panel admin)
   lugar: "Iglesia Adventista · Chile",  // aparece en el comprobante
 
   logos: {
@@ -373,7 +383,7 @@ const CONFIG = {
 
   inactividadSeg: 60,   // segundos sin tocar antes de avisar
   avisoSeg: 10,         // cuenta regresiva del aviso
-  adminPin: "2580",     // PIN del panel oculto (mantener presionada la esquina inferior derecha 3 s)
+  adminPin: "1915",     // PIN del panel oculto (mantener presionada la esquina inferior derecha 3 s)
 
   ticker: [
     "Bienvenido al Cajero de la Esperanza",
@@ -506,18 +516,43 @@ function tryFullscreen(){
 /* =========================================================
    FLUJO DE OPERACIÓN
    ========================================================= */
-let op=null, data={}, stepIdx=0, buffer="";
-function resetSession(){op=null;data={};stepIdx=0;buffer=""}
+let op=null, data={}, stepIdx=0, buffer="", phoneIntl=false;
+function resetSession(){op=null;data={};stepIdx=0;buffer="";phoneIntl=false}
 function visibleSteps(){return op.pasos.filter(p=>!p.when||p.when(data))}
 
 function startOp(key){
-  op=OPS[key]; op.key=key; data={}; stepIdx=0; renderStep(); go("step");
+  op=OPS[key]; op.key=key; data={}; stepIdx=0; phoneIntl=false; renderStep(); go("step");
+}
+
+/* Teclado: en teléfonos/tablets se usa el teclado del dispositivo por defecto
+   (más rápido, con dictado por voz y autocorrector). En el cajero, el de pantalla. */
+const ES_MOVIL=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+let tecladoNativo=ES_MOVIL;
+const MAX_TEXTO=60, MAX_AREA=800;
+
+/* Teclas: se usa pointerdown (respuesta inmediata, admite toques rápidos y
+   varios dedos) en vez de click, que en Android pierde toques seguidos. */
+function bindKeys(root,fn){
+  root.querySelectorAll("[data-k]").forEach(b=>{
+    b.addEventListener("pointerdown",e=>{e.preventDefault();lastTouch=Date.now();fn(b.dataset.k,b)});
+    b.addEventListener("click",e=>e.preventDefault());
+  });
+}
+
+function fmtPhone(t){
+  t=t||"";
+  const m=t.match(/^\+569(\d{4})(\d{4})$/);
+  return m?`+56 9 ${m[1]} ${m[2]}`:t;
 }
 
 function renderStep(){
   const steps=visibleSteps(), st=steps[stepIdx];
   buffer=data[st.id]||"";
-  if(st.type==="phone") buffer=buffer.replace(/^9/,"");
+  if(st.type==="phone"){
+    if(!buffer){/* mantiene el modo elegido */}
+    else if(/^\+569\d{8}$/.test(buffer)){phoneIntl=false;buffer=buffer.slice(4)}
+    else {phoneIntl=true;buffer=buffer.replace(/^\+/,"")}
+  }
   $("#st-op").textContent=`${op.ico} ${op.tipo} · ${op.nombre}`;
   $("#st-prog").innerHTML=steps.map((_,i)=>`<i class="${i<=stepIdx?"on":""}"></i>`).join("");
   $("#st-prompt").textContent=st.prompt;
@@ -531,70 +566,99 @@ function renderStep(){
     body.querySelectorAll(".choice").forEach(b=>b.onclick=()=>{data[st.id]=b.dataset.val; next()});
   }
   else if(st.type==="phone"){
+    $("#st-hint").textContent=phoneIntl
+      ?"Ingrese el código de su país y su número (ej: 54 9 11 1234 5678)"
+      :st.hint;
     body.innerHTML=`<div class="display" id="disp"></div>
+      <button class="btn ghost intl" id="ph-intl">${phoneIntl?"🇨🇱 Usar número chileno (+56 9)":"🌎 No tengo número chileno"}</button>
       <div class="pin">
         ${[1,2,3].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side no" data-act="cancel">Cancelar</button>
         ${[4,5,6].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side warn" data-k="DEL">Corregir</button>
         ${[7,8,9].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side warn" id="st-prev">Volver</button>
         <span></span><button class="key" data-k="0">0</button><span></span><button class="key side ok" id="st-next">Continuar</button>
       </div>`;
-    body.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{
-      const k=b.dataset.k;
-      if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<8) buffer+=k;
+    bindKeys(body,k=>{
+      const max=phoneIntl?15:8;
+      if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<max) buffer+=k;
       paintDisplay(st);
     });
+    $("#ph-intl").onclick=()=>{phoneIntl=!phoneIntl;buffer="";data[st.id]="";renderStep()};
   }
   else { // text / area
+    const area=st.type==="area", max=area?MAX_AREA:MAX_TEXTO;
     const rows=[["1","2","3","4","5","6","7","8","9","0"],["Q","W","E","R","T","Y","U","I","O","P"],["A","S","D","F","G","H","J","K","L","Ñ"],["Z","X","C","V","B","N","M",",",".","-"]];
-    body.innerHTML=`<div class="display ${st.type==="area"?"multi":""}" id="disp"></div>
-      <div class="kb">
+    const campo=area
+      ?`<textarea class="display multi txt" id="txt" maxlength="${max}" autocapitalize="sentences" spellcheck="true"></textarea>`
+      :`<input class="display txt" id="txt" maxlength="${max}" autocapitalize="words" autocomplete="off" spellcheck="false">`;
+    body.innerHTML=`<div class="txt-wrap">${campo}<span class="count" id="txt-n"></span></div>
+      <div class="kb" id="kb">
         ${rows.map(r=>`<div class="row">${r.map(k=>`<button class="key" data-k="${k}">${k}</button>`).join("")}</div>`).join("")}
         <div class="row"><button class="key dark w2" data-k="ÁÉ">Á É…</button><button class="key w6" data-k=" ">espacio</button><button class="key dark w2" data-k="DEL">⌫ Borrar</button></div>
       </div>
       <div class="actions"><button class="btn no" data-act="cancel">Cancelar</button><button class="btn warn" id="st-prev">Volver</button>
-        ${st.optional?`<button class="btn ghost" id="st-skip">Omitir</button>`:""}<button class="btn ok" id="st-next">Continuar</button></div>`;
+        ${ES_MOVIL?"":`<button class="btn ghost kb-toggle" id="kb-toggle"></button>`}${st.optional?`<button class="btn ghost" id="st-skip">Omitir</button>`:""}<button class="btn ok" id="st-next">Continuar</button></div>`;
+    const tx=$("#txt"); tx.value=buffer;
+
+    const applyMode=()=>{
+      $("#kb").style.display=tecladoNativo?"none":"";
+      tx.readOnly=!tecladoNativo;                 // en modo pantalla no abre el teclado del sistema
+      tx.setAttribute("inputmode",tecladoNativo?"text":"none");
+      const t=$("#kb-toggle"); if(t) t.textContent=tecladoNativo?"🔤 Usar teclado en pantalla":"⌨️ Usar teclado del dispositivo";
+      if(tecladoNativo){ setTimeout(()=>{tx.focus();tx.setSelectionRange(tx.value.length,tx.value.length)},50) }
+    };
+    const t=$("#kb-toggle"); if(t) t.onclick=()=>{tecladoNativo=!tecladoNativo;applyMode()};
+    tx.addEventListener("input",()=>{buffer=tx.value.slice(0,max);lastTouch=Date.now();paintDisplay(st)});
+
     let acc=false;
-    const accMap={A:"Á",E:"É",I:"Í",O:"Ó",U:"Ú"};
-    body.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{
-      const k=b.dataset.k, max=st.type==="area"?280:60;
+    const accMap={A:"Á",E:"É",I:"Í",O:"Ó",U:"Ú"}, accKey=body.querySelector('[data-k="ÁÉ"]');
+    bindKeys($("#kb"),k=>{
       if(k==="DEL") buffer=buffer.slice(0,-1);
-      else if(k==="ÁÉ"){acc=!acc;b.style.background=acc?"var(--dorado)":"";return}
+      else if(k==="ÁÉ"){acc=!acc;accKey.style.background=acc?"var(--dorado)":"";return}
       else if(buffer.length<max){
-        let ch=acc&&accMap[k]?accMap[k]:k;
-        // Mayúscula al inicio de palabra, minúscula en el resto
-        const start=!buffer.length||/[\s.,-]$/.test(buffer);
+        const ch=acc&&accMap[k]?accMap[k]:k;
+        // nombre/dirección: mayúscula al inicio de cada palabra; petición: al inicio de oración
+        const start=area?(!buffer.length||/[.!?]\s*$/.test(buffer)):(!buffer.length||/[\s.,-]$/.test(buffer));
         buffer+= start?ch:ch.toLowerCase();
-        if(acc){acc=false;body.querySelector('[data-k="ÁÉ"]').style.background=""}
+        if(acc){acc=false;accKey.style.background=""}
       }
+      tx.value=buffer; tx.scrollTop=tx.scrollHeight;
       paintDisplay(st);
     });
+    applyMode();
     const sk=$("#st-skip"); if(sk) sk.onclick=()=>{data[st.id]="";next()};
   }
   const pv=$("#st-prev"); if(pv) pv.onclick=prev;
-  const nx=$("#st-next"); if(nx) nx.onclick=()=>{ if(valid(st)){data[st.id]=st.type==="phone"?"9"+buffer:buffer.trim();next()} };
+  const nx=$("#st-next"); if(nx) nx.onclick=()=>{
+    if(!valid(st)) return;
+    data[st.id]= st.type==="phone" ? (phoneIntl?"+"+buffer:"+569"+buffer) : buffer.trim();
+    next();
+  };
   paintDisplay(st);
 }
 
 function valid(st){
   const v=buffer.trim();
-  if(st.type==="phone") return /^\d{8}$/.test(v);
+  if(st.type==="phone") return phoneIntl ? /^\d{8,15}$/.test(v) : /^\d{8}$/.test(v);
   if(st.optional) return true;
   return v.length>=(st.min||1);
 }
 function paintDisplay(st){
-  const d=$("#disp"); if(!d) return;
-  let shown=buffer;
+  const nx=$("#st-next");
   if(st.type==="phone"){
-    // "+56 9" fijo; los 8 dígitos se completan sobre la plantilla ____ ____
-    const t=(buffer+"________").slice(0,8);
-    const typed=buffer.length;
-    const fmt=[...t].map((c,i)=>(i===4?" ":"")+(i<typed?esc(c):`<span class="ph">_</span>`)).join("");
-    d.innerHTML=`<span style="color:#fff">+56 9</span>&nbsp;${fmt}`;
-    const nx=$("#st-next"); if(nx) nx.disabled=!valid(st);
-    return;
+    const d=$("#disp");
+    if(phoneIntl){
+      d.innerHTML=`<span style="color:#fff">+</span>${buffer?esc(buffer):`<span class="ph">código país + número</span>`}<span class="caret"></span>`;
+    }else{
+      // "+56 9" fijo; los 8 dígitos se completan sobre la plantilla ____ ____
+      const t=(buffer+"________").slice(0,8);
+      const fmt=[...t].map((c,i)=>(i===4?" ":"")+(i<buffer.length?esc(c):`<span class="ph">_</span>`)).join("");
+      d.innerHTML=`<span style="color:#fff">+56 9</span>&nbsp;${fmt}`;
+    }
+  }else{
+    const n=$("#txt-n"), max=st.type==="area"?MAX_AREA:MAX_TEXTO;
+    if(n) n.textContent=st.type==="area"?`${buffer.length}/${max}`:"";
   }
-  d.innerHTML=buffer?`${esc(shown)}<span class="caret"></span>`:`<span class="ph">_</span><span class="caret"></span>`;
-  const nx=$("#st-next"); if(nx) nx.disabled=!valid(st);
+  if(nx) nx.disabled=!valid(st);
 }
 function prev(){ if(stepIdx===0){go("menu");return} stepIdx--; renderStep(); }
 function next(){
@@ -609,7 +673,7 @@ let consent=false;
 function showConfirm(){
   consent=false; $("#cf-consent").classList.remove("on"); $("#cf-consent .box").textContent=""; $("#cf-ok").disabled=true;
   const rows=[["Operación",`${op.tipo} · ${op.nombre}`],
-    ...visibleSteps().map(p=>[p.label, p.type==="phone"?"+56 9 "+data[p.id].slice(1,5)+" "+data[p.id].slice(5):(data[p.id]||"—")])];
+    ...visibleSteps().map(p=>[p.label, p.type==="phone"?fmtPhone(data[p.id]):(data[p.id]||"—")])];
   $("#cf-summary").innerHTML=rows.map(([k,v])=>`<div class="row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("");
   go("confirm");
 }
@@ -649,7 +713,7 @@ async function submit(){
   const rec={
     folio:folio(), fecha:new Date().toLocaleString("es-CL"), kiosco:CONFIG.kioscoId,
     operacion:op.nombre, tipo_cajero:op.tipo,
-    nombre:data.nombre||"", telefono:data.telefono?"+56"+data.telefono:"", comuna:CONFIG.comuna||"",
+    nombre:data.nombre||"", telefono:data.telefono||"", comuna:getComuna(),
     direccion:data.direccion||"",
     detalle: visibleSteps().filter(p=>!["nombre","telefono","comuna","direccion"].includes(p.id))
               .map(p=>`${p.label}: ${data[p.id]||"—"}`).join(" | "),
@@ -733,20 +797,24 @@ $("#idle-stay").onclick=()=>{clearInterval(idleTimer);$("#idle").classList.remov
 let pressT=null;
 $("#admin-hit").addEventListener("pointerdown",()=>{pressT=setTimeout(openAdmin,3000)});
 ["pointerup","pointerleave"].forEach(ev=>$("#admin-hit").addEventListener(ev,()=>clearTimeout(pressT)));
+function getComuna(){ const c=store.get("cajero_comuna",null); return c!==null?c:(CONFIG.comuna||"") }
 function openAdmin(){
   const pin=prompt("PIN de administrador"); if(pin!==CONFIG.adminPin) return;
-  const all=store.get("cajero_registros",[]), pend=store.get("cajero_pendientes",[]);
-  $("#adm-stats").innerHTML=`Registros guardados en este equipo: <b>${all.length}</b><br>Pendientes de envío: <b>${pend.length}</b><br>Endpoint: ${CONFIG.endpoint?"configurado ✔":"<b style='color:#c8312d'>NO configurado</b>"}`;
-  $("#admin").classList.add("show");
+  openAdminNoPin();
 }
-$("#adm-close").onclick=()=>$("#admin").classList.remove("show");
-$("#adm-retry").onclick=async()=>{await flushQueue();openAdminRefresh()};
-function openAdminRefresh(){ $("#admin").classList.remove("show"); openAdminNoPin() }
 function openAdminNoPin(){
   const all=store.get("cajero_registros",[]), pend=store.get("cajero_pendientes",[]);
-  $("#adm-stats").innerHTML=`Registros guardados en este equipo: <b>${all.length}</b><br>Pendientes de envío: <b>${pend.length}</b>`;
+  $("#adm-stats").innerHTML=`Comuna: <b>${esc(getComuna()||"(sin definir)")}</b><br>Registros guardados en este equipo: <b>${all.length}</b><br>Pendientes de envío: <b>${pend.length}</b><br>Endpoint: ${CONFIG.endpoint?"configurado ✔":"<b style='color:#c8312d'>NO configurado</b>"}`;
   $("#admin").classList.add("show");
 }
+function openAdminRefresh(){ openAdminNoPin() }
+$("#adm-close").onclick=()=>$("#admin").classList.remove("show");
+$("#adm-retry").onclick=async()=>{await flushQueue();openAdminRefresh()};
+$("#adm-comuna").onclick=()=>{
+  const c=prompt("Comuna donde está ubicado este cajero:",getComuna());
+  if(c===null) return;
+  store.set("cajero_comuna",c.trim()); openAdminRefresh();
+};
 $("#adm-fs").onclick=tryFullscreen;
 $("#adm-all").onclick=async()=>{
   const all=store.get("cajero_registros",[]); let ok=0; const left=[];
