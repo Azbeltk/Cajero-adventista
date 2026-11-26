@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content, viewport-fit=cover">
+<meta name="theme-color" content="#0b2a4a">
+<meta name="color-scheme" content="dark">
 <title>Cajero de la Esperanza · Iglesia Adventista</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,12 +30,12 @@
   --fs: clamp(16px, 2.1vmin, 30px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;background:#05121f;color:var(--blanco);
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#05121f;color:var(--blanco);
   font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;font-size:var(--fs);
   user-select:none;-webkit-user-select:none;touch-action:manipulation}
 
 /* Marco del cajero */
-#atm{position:fixed;inset:0;display:flex;flex-direction:column;
+#atm{position:fixed;inset:0;height:100%;height:100dvh;display:flex;flex-direction:column;
   background:radial-gradient(ellipse at top,#173f66 0%,var(--azul) 55%,#061a2e 100%)}
 header.bar{display:flex;align-items:center;justify-content:space-between;
   padding:1.6vmin 3vmin;background:rgba(0,0,0,.25);border-bottom:2px solid rgba(255,255,255,.08)}
@@ -50,6 +52,9 @@ main{flex:1;position:relative;overflow:hidden}
 .screen{position:absolute;inset:0;display:none;flex-direction:column;padding:3vmin 4vmin;
   animation:fade .35s ease}
 .screen.active{display:flex}
+/* Teclado del teléfono abierto: se ocultan encabezado y franja para dar espacio */
+body.kb-open header.bar, body.kb-open footer.ticker{display:none}
+body.kb-open .screen{padding-top:2vmin;overflow-y:auto}
 @keyframes fade{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
 
 footer.ticker{height:5.5vmin;min-height:34px;background:var(--dorado);color:#1a1a1a;
@@ -166,15 +171,27 @@ input.display{font-size:1.7em}
 .choice.sel{border-color:var(--dorado);background:linear-gradient(180deg,#2c6aa5,#1e4f80)}
 
 /* Confirmación */
-.summary{flex:1;background:#f4f1e8;color:#222;border-radius:12px;padding:2.4vmin 3vmin;
+.summary{flex:0 1 auto;margin-bottom:auto;background:#f4f1e8;color:#222;border-radius:12px;padding:2.4vmin 3vmin;
   font-family:'Share Tech Mono',monospace;overflow:auto;font-size:1em;line-height:1.5}
 .summary .row{display:flex;justify-content:space-between;gap:2vmin;border-bottom:1px dashed #bbb;padding:.4vmin 0}
 .summary .row b{white-space:nowrap}
 .summary .row span{text-align:right}
-.consent{display:flex;gap:1.6vmin;align-items:center;font-size:.82em;color:var(--gris);cursor:pointer}
-.consent .box{width:5vmin;height:5vmin;min-width:28px;min-height:28px;border-radius:8px;border:3px solid var(--celeste);
-  display:grid;place-items:center;font-size:1.2em;flex:none}
+.consent{display:flex;gap:2.4vmin;align-items:center;text-align:left;font:inherit;color:#fff;cursor:pointer;
+  background:rgba(242,182,50,.12);border:3px dashed var(--dorado);border-radius:16px;padding:2vmin 2.6vmin;
+  animation:pulseC 1.8s ease-in-out infinite}
+@keyframes pulseC{50%{box-shadow:0 0 0 6px rgba(242,182,50,.25)}}
+.consent .box{width:8vmin;height:8vmin;min-width:44px;min-height:44px;flex:none;border-radius:12px;border:4px solid var(--dorado);
+  background:#fff;display:grid;place-items:center;font-size:1.6em;font-weight:800;color:#fff}
+.consent .ctxt{display:flex;flex-direction:column;gap:.6vmin}
+.consent .cta{color:var(--dorado);font-size:1.05em}
+.consent .cok{display:none;color:#7ef0a8;font-size:1.05em}
+.consent small{color:var(--gris);font-size:.78em;line-height:1.35}
+.consent.on{background:rgba(31,157,85,.15);border:3px solid var(--verde);animation:none}
 .consent.on .box{background:var(--verde);border-color:var(--verde)}
+.consent.on .cta{display:none}.consent.on .cok{display:block}
+.consent.shake{animation:shake .45s}
+@keyframes shake{20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+#cf-ok.wait{background:#5b6b7a;box-shadow:0 5px 0 rgba(0,0,0,.45)}
 
 /* Procesando */
 #s-proc{align-items:center;justify-content:center;gap:3vmin;text-align:center}
@@ -246,6 +263,10 @@ input.display{font-size:1.7em}
 #admin .btn{font-size:.85em}
 #admin-hit{position:fixed;right:0;bottom:0;width:70px;height:70px;z-index:40}
 
+@media (max-width:640px){
+  .actions{flex-wrap:wrap;gap:1.6vmin}
+  .actions .btn{flex:1 1 28%;padding:1.6vmin 2vmin;font-size:.8em;min-height:7vmin}
+}
 @media (orientation:portrait){
   .menu-grid{grid-template-columns:1fr}
   .menu-grid .op.l::before,.menu-grid .op.r::after{display:none}
@@ -303,12 +324,18 @@ input.display{font-size:1.7em}
     <section class="screen" id="s-confirm" style="gap:2vmin">
       <div class="op-title"><span>Confirme su operación</span></div>
       <div class="summary" id="cf-summary"></div>
-      <div class="consent" id="cf-consent"><span class="box"></span>
-        <span>Autorizo a la Iglesia Adventista del Séptimo Día a usar estos datos solo para contactarme por esta solicitud (Ley N° 19.628). Puedo pedir su eliminación en cualquier momento.</span></div>
+      <button class="consent" id="cf-consent" type="button">
+        <span class="box"></span>
+        <span class="ctxt">
+          <b class="cta">👆 Toque aquí para autorizar el uso de sus datos</b>
+          <b class="cok">✔ Autorización aceptada</b>
+          <small>Autorizo a la Iglesia Adventista del Séptimo Día a usar estos datos solo para contactarme por esta solicitud (Ley N° 19.628). Puedo pedir su eliminación en cualquier momento.</small>
+        </span>
+      </button>
       <div class="actions">
         <button class="btn no" data-act="cancel">Cancelar</button>
         <button class="btn warn" data-act="back">Corregir</button>
-        <button class="btn ok" id="cf-ok" disabled>Confirmar</button>
+        <button class="btn ok" id="cf-ok">Confirmar</button>
       </div>
     </section>
 
@@ -773,17 +800,28 @@ function next(){
 /* Confirmación */
 let consent=false;
 function showConfirm(){
-  consent=false; $("#cf-consent").classList.remove("on"); $("#cf-consent .box").textContent=""; $("#cf-ok").disabled=true;
+  consent=false; $("#cf-consent").classList.remove("on"); $("#cf-consent .box").textContent=""; paintOk();
   const rows=[["Operación",`${op.tipo} · ${op.nombre}`],
     ...visibleSteps().map(p=>[p.label, p.type==="phone"?fmtPhone(data[p.id],data[p.id+"_cc"]):(data[p.id]||"—")])];
   $("#cf-summary").innerHTML=rows.map(([k,v])=>`<div class="row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("");
   go("confirm");
 }
+function paintOk(){
+  const b=$("#cf-ok");
+  b.classList.toggle("wait",!consent);
+  b.textContent=consent?"Confirmar":"Primero autorice ↑";
+}
 $("#cf-consent").onclick=()=>{
   consent=!consent; $("#cf-consent").classList.toggle("on",consent);
-  $("#cf-consent .box").textContent=consent?"✓":""; $("#cf-ok").disabled=!consent;
+  $("#cf-consent .box").textContent=consent?"✓":""; paintOk();
 };
-$("#cf-ok").onclick=submit;
+$("#cf-ok").onclick=()=>{
+  if(!consent){                         // señala dónde está la autorización
+    const c=$("#cf-consent"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake");
+    setTimeout(()=>c.classList.remove("shake"),500); return;
+  }
+  submit();
+};
 
 /* =========================================================
    ENVÍO DE DATOS
@@ -933,6 +971,22 @@ $("#adm-csv").onclick=()=>{
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download=`cajero_${CONFIG.kioscoId}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 };
+
+/* Ajuste cuando aparece el teclado del teléfono */
+if(window.visualViewport){
+  const base={h:window.visualViewport.height};
+  const fit=()=>{
+    const vv=window.visualViewport;
+    if(vv.height>base.h) base.h=vv.height;
+    const abierto=vv.height<base.h*0.78;
+    document.body.classList.toggle("kb-open",abierto);
+    // evita que el navegador desplace la página y deje ver un espacio vacío
+    if(vv.offsetTop||window.scrollY){ window.scrollTo(0,0) }
+  };
+  visualViewport.addEventListener("resize",fit);
+  visualViewport.addEventListener("scroll",fit);
+  window.addEventListener("orientationchange",()=>{base.h=0;setTimeout(fit,400)});
+}
 
 /* Inicio */
 paintLogos(); tick(); setInterval(tick,15000); flushQueue();
