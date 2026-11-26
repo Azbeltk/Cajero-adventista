@@ -399,7 +399,8 @@ input.display{font-size:1.7em}
   <button class="btn ok" id="adm-retry">Reintentar envíos pendientes</button>
   <button class="btn ok" id="adm-all">Reenviar TODOS los registros (sin duplicar)</button>
   <button class="btn warn" id="adm-csv">Descargar respaldo CSV</button>
-  <button class="btn ghost" style="color:#111;background:#ddd" id="adm-fs">Pantalla completa</button>
+  <button class="btn ghost" style="color:#111;background:#ddd" id="adm-fs">Entrar / salir de pantalla completa</button>
+  <button class="btn ghost" style="color:#111;background:#ddd" id="adm-fsauto"></button>
   <button class="btn no" id="adm-close">Cerrar</button>
 </div></div>
 
@@ -434,6 +435,7 @@ const CONFIG = {
 
   inactividadSeg: 60,   // segundos sin tocar antes de avisar
   avisoSeg: 10,         // cuenta regresiva del aviso
+  pantallaCompletaAuto: false, // true = entra a pantalla completa al primer toque (también se cambia desde el panel)
   adminPin: "1915",     // PIN del panel oculto (mantener presionada la esquina inferior derecha 3 s)
 
   ticker: [
@@ -557,8 +559,10 @@ document.addEventListener("click",e=>{
   const a=e.target.closest("[data-act]");
   if(a){ if(a.dataset.act==="cancel") askCancel(); if(a.dataset.act==="back"){stepIdx=visibleSteps().length-1;renderStep();go("step")} }
 });
-$("#s-home").addEventListener("click",()=>{go("menu"); tryFullscreen()});
+$("#s-home").addEventListener("click",()=>{go("menu"); if(fsAuto()) tryFullscreen()});
 
+// Pantalla completa: desactivada por defecto. Se activa por equipo desde el panel admin.
+function fsAuto(){ const v=store.get("cajero_fs_auto",null); return v!==null?v:!!CONFIG.pantallaCompletaAuto }
 function tryFullscreen(){
   const el=document.documentElement;
   if(!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
@@ -947,6 +951,7 @@ function openAdmin(){
 function openAdminNoPin(){
   const all=store.get("cajero_registros",[]), pend=store.get("cajero_pendientes",[]);
   $("#adm-stats").innerHTML=`Comuna: <b>${esc(getComuna()||"(sin definir)")}</b><br>Registros guardados en este equipo: <b>${all.length}</b><br>Pendientes de envío: <b>${pend.length}</b><br>Endpoint: ${CONFIG.endpoint?"configurado ✔":"<b style='color:#c8312d'>NO configurado</b>"}`;
+  $("#adm-fsauto").textContent="Pantalla completa automática: "+(fsAuto()?"SÍ (tocar para desactivar)":"NO (tocar para activar)");
   $("#admin").classList.add("show");
 }
 function openAdminRefresh(){ openAdminNoPin() }
@@ -957,7 +962,10 @@ $("#adm-comuna").onclick=()=>{
   if(c===null) return;
   store.set("cajero_comuna",c.trim()); openAdminRefresh();
 };
-$("#adm-fs").onclick=tryFullscreen;
+$("#adm-fs").onclick=()=>{
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else tryFullscreen();
+};
+$("#adm-fsauto").onclick=()=>{ store.set("cajero_fs_auto",!fsAuto()); openAdminRefresh() };
 $("#adm-all").onclick=async()=>{
   const all=store.get("cajero_registros",[]); let ok=0; const left=[];
   for(const r of all){ if(await send(r)) ok++; else left.push(r) }
