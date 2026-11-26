@@ -148,7 +148,7 @@ input.display{font-size:1.7em}
 
 /* Teclado numérico estilo cajero */
 .pin{display:grid;grid-template-columns:repeat(3,15vmin) 20vmin;gap:1.4vmin;justify-content:center;flex:1;align-content:center}
-.pin .key{max-width:none;min-height:10vmin;font-size:1.5em}
+.pin .key{max-width:none;min-height:9vmin;font-size:1.5em}
 .pin .side{font-size:.75em;text-transform:uppercase;letter-spacing:.05em;color:#fff}
 .pin .side.no{background:var(--rojo);box-shadow:0 4px 0 #7a1b18}
 .pin .side.warn{background:var(--amarillo);color:#1a1a1a;box-shadow:0 4px 0 #8a6b00}
@@ -221,6 +221,17 @@ input.display{font-size:1.7em}
 .actions.top{margin-bottom:1vmin}
 .actions.top .btn{min-height:7.5vmin;padding:1.2vmin 2vmin}
 .kb,.pin{touch-action:none}
+.ph2{display:flex;gap:1.6vmin}
+.seg{font:inherit;font-family:'Share Tech Mono',monospace;font-size:1.6em;color:#7ef0a8;background:#02101c;border:3px solid #24527f;
+  border-radius:12px;padding:.8vmin 2vmin 1.2vmin;text-align:left;min-width:22vmin;cursor:pointer}
+.seg.grow{flex:1}
+.seg small{display:block;font-family:Inter,sans-serif;font-size:.42em;color:var(--gris);letter-spacing:.06em;text-transform:uppercase}
+.seg.on{border-color:var(--dorado);box-shadow:0 0 0 3px rgba(242,182,50,.35)}
+.seg .ph{color:#3d6d58}
+.cc-chips{display:flex;flex-wrap:wrap;gap:1vmin;justify-content:center}
+.chip{font:inherit;font-size:.72em;font-weight:700;color:#fff;background:#1f4f7d;border:2px solid rgba(255,255,255,.2);
+  border-radius:99px;padding:1vmin 2vmin;min-height:6vmin;cursor:pointer}
+.chip.back{background:rgba(255,255,255,.12)}
 .key.down{transform:translateY(3px);box-shadow:0 1px 0 #8aa1b8;background:#fff}
 .key.dark.down{background:#7d97b3}
 #idle{position:fixed;inset:0;background:rgba(2,10,20,.85);display:none;align-items:center;justify-content:center;z-index:50}
@@ -530,11 +541,14 @@ function tryFullscreen(){
    FLUJO DE OPERACIÓN
    ========================================================= */
 let op=null, data={}, stepIdx=0, buffer="", phoneIntl=false;
-function resetSession(){op=null;data={};stepIdx=0;buffer="";phoneIntl=false}
+let phCC="", phNum="", phField="cc";   // número extranjero: código de país + número
+// Atajos de códigos de país frecuentes en Chile
+const PAISES=[["🇻🇪 Venezuela","58"],["🇵🇪 Perú","51"],["🇨🇴 Colombia","57"],["🇭🇹 Haití","509"],["🇧🇴 Bolivia","591"],["🇦🇷 Argentina","54"]];
+function resetSession(){op=null;data={};stepIdx=0;buffer="";phoneIntl=false;phCC="";phNum="";phField="cc"}
 function visibleSteps(){return op.pasos.filter(p=>!p.when||p.when(data))}
 
 function startOp(key){
-  op=OPS[key]; op.key=key; data={}; stepIdx=0; phoneIntl=false; renderStep(); go("step");
+  op=OPS[key]; op.key=key; data={}; stepIdx=0; phoneIntl=false; phCC=""; phNum=""; phField="cc"; renderStep(); go("step");
 }
 
 /* Teclado: en teléfonos/tablets se usa el teclado del dispositivo por defecto
@@ -568,8 +582,9 @@ function bindKeys(root,fn){
   });
 }
 
-function fmtPhone(t){
+function fmtPhone(t,cc){
   t=t||"";
+  if(cc&&t.startsWith("+"+cc)) return `+${cc} ${t.slice(cc.length+1)}`;
   const m=t.match(/^\+569(\d{4})(\d{4})$/);
   return m?`+56 9 ${m[1]} ${m[2]}`:t;
 }
@@ -578,9 +593,9 @@ function renderStep(){
   const steps=visibleSteps(), st=steps[stepIdx];
   buffer=data[st.id]||"";
   if(st.type==="phone"){
-    if(!buffer){/* mantiene el modo elegido */}
+    if(!buffer){/* mantiene el modo y lo ya digitado */}
     else if(/^\+569\d{8}$/.test(buffer)){phoneIntl=false;buffer=buffer.slice(4)}
-    else {phoneIntl=true;buffer=buffer.replace(/^\+/,"")}
+    else { phoneIntl=true; phCC=data[st.id+"_cc"]||""; phNum=buffer.slice(1+phCC.length); phField="num"; buffer="" }
   }
   $("#st-op").textContent=`${op.ico} ${op.tipo} · ${op.nombre}`;
   $("#st-prog").innerHTML=steps.map((_,i)=>`<i class="${i<=stepIdx?"on":""}"></i>`).join("");
@@ -596,22 +611,47 @@ function renderStep(){
   }
   else if(st.type==="phone"){
     $("#st-hint").textContent=phoneIntl
-      ?"Ingrese el código de su país y su número (ej: 54 9 11 1234 5678)"
+      ?"Primero el código de su país (o toque uno de abajo) y luego su número"
       :st.hint;
-    body.innerHTML=`<div class="display" id="disp"></div>
-      <button class="btn ghost intl" id="ph-intl">${phoneIntl?"🇨🇱 Usar número chileno (+56 9)":"🌎 No tengo número chileno"}</button>
-      <div class="pin">
+    body.innerHTML=(phoneIntl
+      ? `<div class="ph2">
+           <button class="seg" id="seg-cc"><small>Código país</small><span id="cc-v"></span></button>
+           <button class="seg grow" id="seg-num"><small>Número</small><span id="num-v"></span></button>
+         </div>
+         <div class="cc-chips">${PAISES.map(([n,c])=>`<button class="chip" data-cc="${c}">${n} +${c}</button>`).join("")}
+           <button class="chip back" id="ph-intl">🇨🇱 Usar número chileno</button></div>`
+      : `<div class="display" id="disp"></div>
+         <button class="btn ghost intl" id="ph-intl">🌎 No tengo número chileno</button>`)+`
+      <div class="pin" id="pin">
         ${[1,2,3].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side no" data-act="cancel">Cancelar</button>
         ${[4,5,6].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side warn" data-k="DEL">Corregir</button>
         ${[7,8,9].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join("")}<button class="key side warn" id="st-prev">Volver</button>
         <span></span><button class="key" data-k="0">0</button><span></span><button class="key side ok" id="st-next">Continuar</button>
       </div>`;
-    bindKeys(body,k=>{
-      const max=phoneIntl?15:8;
-      if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<max) buffer+=k;
+    // Los eventos se enlazan al teclado recién creado (no a un contenedor que persiste)
+    bindKeys($("#pin"),k=>{
+      if(!phoneIntl){
+        if(k==="DEL") buffer=buffer.slice(0,-1); else if(buffer.length<8) buffer+=k;
+      }else if(k==="DEL"){
+        if(phField==="num"&&!phNum) phField="cc";
+        if(phField==="num") phNum=phNum.slice(0,-1); else phCC=phCC.slice(0,-1);
+      }else if(phField==="cc"){
+        if(!(k==="0"&&!phCC) && phCC.length<3) phCC+=k;
+        if(phCC.length===3) phField="num";            // máximo 3 dígitos: pasa solo al número
+      }else{
+        if(phNum.length<14 && phCC.length+phNum.length<15) phNum+=k;
+      }
       paintDisplay(st);
     });
-    $("#ph-intl").onclick=()=>{phoneIntl=!phoneIntl;buffer="";data[st.id]="";renderStep()};
+    $("#ph-intl").onclick=()=>{
+      phoneIntl=!phoneIntl; buffer=""; phCC=""; phNum=""; phField="cc";
+      delete data[st.id]; delete data[st.id+"_cc"]; renderStep();
+    };
+    if(phoneIntl){
+      $("#seg-cc").onclick=()=>{phField="cc";paintDisplay(st)};
+      $("#seg-num").onclick=()=>{if(phCC)phField="num";paintDisplay(st)};
+      body.querySelectorAll("[data-cc]").forEach(b=>b.onclick=()=>{phCC=b.dataset.cc;phField="num";paintDisplay(st)});
+    }
   }
   else { // text / area
     const area=st.type==="area", max=area?MAX_AREA:MAX_TEXTO;
@@ -658,8 +698,9 @@ function renderStep(){
   }
   const pv=$("#st-prev"); if(pv) pv.onclick=prev;
   const nx=$("#st-next"); if(nx) nx.onclick=()=>{
+    if(st.type==="phone"&&phoneIntl&&phField==="cc"){ if(phCC){phField="num";paintDisplay(st)} return }  // "Siguiente"
     if(!valid(st)) return;
-    data[st.id]= st.type==="phone" ? (phoneIntl?"+"+buffer:"+569"+buffer) : buffer.trim();
+    if(st.type==="phone") guardarTelefono(st); else data[st.id]=buffer.trim();
     next();
   };
   paintDisplay(st);
@@ -667,7 +708,9 @@ function renderStep(){
 
 function valid(st){
   const v=buffer.trim();
-  if(st.type==="phone") return phoneIntl ? /^\d{8,15}$/.test(v) : /^\d{8}$/.test(v);
+  if(st.type==="phone") return phoneIntl
+      ? /^[1-9]\d{0,2}$/.test(phCC) && /^\d{6,14}$/.test(phNum) && phCC.length+phNum.length<=15
+      : /^\d{8}$/.test(v);
   if(st.optional) return true;
   return v.length>=(st.min||1);
 }
@@ -676,7 +719,16 @@ function paintDisplay(st){
   if(st.type==="phone"){
     const d=$("#disp");
     if(phoneIntl){
-      d.innerHTML=`<span style="color:#fff">+</span>${buffer?esc(buffer):`<span class="ph">código país + número</span>`}<span class="caret"></span>`;
+      const car='<span class="caret"></span>';
+      $("#cc-v").innerHTML=`+${phCC?esc(phCC):'<span class="ph">__</span>'}${phField==="cc"?car:""}`;
+      $("#num-v").innerHTML=`${phNum?esc(phNum):'<span class="ph">_________</span>'}${phField==="num"?car:""}`;
+      $("#seg-cc").classList.toggle("on",phField==="cc");
+      $("#seg-num").classList.toggle("on",phField==="num");
+      if(nx){
+        nx.textContent=phField==="cc"?"Siguiente":"Continuar";
+        nx.disabled=phField==="cc"?!/^[1-9]\d{0,2}$/.test(phCC):!valid(st);
+      }
+      return;
     }else{
       // "+56 9" fijo; los 8 dígitos se completan sobre la plantilla ____ ____
       const t=(buffer+"________").slice(0,8);
@@ -693,7 +745,12 @@ function guardarBorrador(){
   if(current!=="step"||!op) return;
   const st=visibleSteps()[stepIdx];
   if(st&&(st.type==="text"||st.type==="area")) data[st.id]=buffer;
-  if(st&&st.type==="phone"&&buffer) data[st.id]=phoneIntl?"+"+buffer:"+569"+buffer;
+  if(st&&st.type==="phone") guardarTelefono(st);
+}
+function guardarTelefono(st){
+  if(phoneIntl){
+    if(phCC||phNum){ data[st.id]="+"+phCC+phNum; data[st.id+"_cc"]=phCC }
+  }else if(buffer){ data[st.id]="+569"+buffer; delete data[st.id+"_cc"] }
 }
 function prev(){
   guardarBorrador();                       // lo escrito no se pierde al volver
@@ -718,7 +775,7 @@ let consent=false;
 function showConfirm(){
   consent=false; $("#cf-consent").classList.remove("on"); $("#cf-consent .box").textContent=""; $("#cf-ok").disabled=true;
   const rows=[["Operación",`${op.tipo} · ${op.nombre}`],
-    ...visibleSteps().map(p=>[p.label, p.type==="phone"?fmtPhone(data[p.id]):(data[p.id]||"—")])];
+    ...visibleSteps().map(p=>[p.label, p.type==="phone"?fmtPhone(data[p.id],data[p.id+"_cc"]):(data[p.id]||"—")])];
   $("#cf-summary").innerHTML=rows.map(([k,v])=>`<div class="row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("");
   go("confirm");
 }
